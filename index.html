@@ -28,43 +28,12 @@
 const chat = document.getElementById("chat");
 const input = document.getElementById("input");
 
-let step = 0;
-let intakeType = "";
-let context = {
-  problem: "",
-  impact: "",
-  scope: "",
-  since: ""
-};
+// 1) Koppel je frontend aan je Vercel backend (zonder slash op het eind)
+const API_BASE = "https://aipc-intake-bot.vercel.app";
 
-/* ========= HERKENNING INC / RFI / CHG ========= */
-
-const INCIDENT_KEYWORDS = [
-  "werkt niet", "stuk", "foutmelding", "crash", "kan niet inloggen",
-  "uitval", "probleem", "storing"
-];
-
-const RFI_KEYWORDS = [
-  "hoe", "wat is", "kan ik", "informatie", "uitleg",
-  "handleiding", "vraag"
-];
-
-const CHANGE_KEYWORDS = [
-  "aanvragen", "toevoegen", "wijzigen", "nieuwe", "bestellen",
-  "laptop", "account", "toegang"
-];
-
-function detectType(text) {
-  const score = { INC: 0, RFI: 0, CHG: 0 };
-
-  INCIDENT_KEYWORDS.forEach(k => { if (text.includes(k)) score.INC++; });
-  RFI_KEYWORDS.forEach(k => { if (text.includes(k)) score.RFI++; });
-  CHANGE_KEYWORDS.forEach(k => { if (text.includes(k)) score.CHG++; });
-
-  return Object.keys(score).reduce((a, b) => score[a] >= score[b] ? a : b);
-}
-
-/* ========= CHAT FUNCTIES ========= */
+// 2) We bewaren de conversatie als "messages" (zoals ChatGPT werkt)
+let messages = [];
+const maxQuestions = 5; // pas aan als je wil
 
 function addMessage(text, cls) {
   const div = document.createElement("div");
@@ -80,132 +49,62 @@ function send() {
 
   addMessage(text, "user");
   input.value = "";
-  handleConversation(text.toLowerCase());
+
+  // 3) Voeg user-bericht toe aan context
+  messages.push({ role: "user", content: text });
+
+  // 4) Vraag de AI (via je Vercel endpoint) om volgende stap
+  callAI();
 }
 
 input.addEventListener("keydown", e => {
   if (e.key === "Enter") send();
 });
 
-/* ========= CONVERSATIE ========= */
+async function callAI() {
+  try {
+    const resp = await fetch(`${API_BASE}/api/next`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        messages,
+        maxQuestions
+      })
+    });
 
-function handleConversation(text) {
+    const data = await resp.json();
 
-  if (step === 0) {
-    context.problem = text;
-    intakeType = detectType(text);
-
-    if (intakeType === "INC") {
-      addMessage("Dit lijkt op een probleem waarbij iets niet werkt. Ik stel een paar vragen om dit goed te begrijpen.", "bot");
-      addMessage("Wat merk je precies van het probleem?", "bot");
+    // 5) Drie mogelijke AI-stadia: question, confirm, final
+    if (data.stage === "question" && data.nextQuestion) {
+      messages.push({ role: "assistant", content: data.nextQuestion });
+      addMessage(data.nextQuestion, "bot");
+      return;
     }
 
-    if (intakeType === "RFI") {
-      addMessage("Dit lijkt een vraag om informatie. Waarvoor heb je deze informatie nodig?", "bot");
+    if (data.stage === "confirm" && data.summary) {
+      messages.push({ role: "assistant", content: data.summary });
+      addMessage(data.summary + "\n\nKlopt dit? (ja/nee)", "bot");
+      return;
     }
 
-    if (intakeType === "CHG") {
-      addMessage("Dit lijkt een wijziging of aanvraag. Wat wil je precies laten aanpassen of aanvragen?", "bot");
+    if (data.stage === "final") {
+      const out =
+        "✅ Type: " + (data.classification || "-") + "\n\n" +
+        "Short description:\n" + (data.shortDescription || "-") + "\n\n" +
+        "Description:\n" + (data.description || "-") + "\n\n" +
+        "Gewenst eindresultaat:\n" + (data.desiredOutcome || "-") + "\n\n" +
+        "Redenering:\n" + (data.reasoning || "-");
+
+      messages.push({ role: "assistant", content: out });
+      addMessage(out, "bot");
+      return;
     }
 
-    step++;
-    return;
+    // 6) Fallback als AI iets onverwachts teruggeeft
+    addMessage("Ik heb nog iets meer context nodig. Kun je dit verder toelichten?", "bot");
+  } catch (e) {
+    addMessage("Er ging iets mis bij het benaderen van de AI-backend. Check of Vercel online is en of je endpoint werkt.", "bot");
   }
-
-  if (step === 1) {
-    context.impact = text;
-
-    if (intakeType === "INC") {
-      addMessage("Wat is de impact op je werk? Kun je nog doorwerken of ligt je werk stil?", "bot");
-    }
-    if (intakeType === "RFI") {
-      addMessage("Is dit ter informatie of om een actie te kunnen uitvoeren?", "bot");
-    }
-    if (intakeType === "CHG") {
-      addMessage("Is dit een eenmalige aanvraag of een structurele wijziging?", "bot");
-    }
-
-    step++;
-    return;
-  }
-
-  if (step === 2) {
-    context.scope = text;
-
-    if (intakeType === "INC") {
-      addMessage("Hebben alleen jij, of ook collega’s hier last van?", "bot");
-    }
-    if (intakeType === "RFI") {
-      addMessage("Heb je deze informatie op korte termijn nodig?", "bot");
-    }
-    if (intakeType === "CHG") {
-      addMessage("Wie gaan hier gebruik van maken?", "bot");
-    }
-
-    step++;
-    return;
-  }
-
-  if (step === 3) {
-    context.since = text;
-    showSummary();
-    step++;
-    return;
-  }
-
-  if (step === 4) {
-    if (text.includes("ja")) {
-      classify();
-    } else {
-      addMessage("Oké, kun je aangeven wat er niet klopt?", "bot");
-      step++;
-    }
-    return;
-  }
-
-  if (step === 5) {
-    context.problem += " (aangepast: " + text + ")";
-    showSummary();
-    step = 4;
-  }
-}
-
-/* ========= SAMENVATTING & OUTPUT ========= */
-
-function showSummary() {
-  addMessage(
-    "Samenvatting:\n\n" +
-    "Type: " + intakeType + "\n" +
-    "Probleem/verzoek: " + context.problem + "\n" +
-    "Impact/doel: " + context.impact + "\n" +
-    "Scope: " + context.scope + "\n" +
-    "Tijd/context: " + context.since + "\n\n" +
-    "Klopt dit? (ja/nee)",
-    "bot"
-  );
-}
-
-function classify() {
-  addMessage(
-    "✅ Type: " + intakeType + "\n\n" +
-    "Short description:\n" + context.problem + "\n\n" +
-    "Description:\n" +
-    "Context: " + context.impact + ". Scope: " + context.scope +
-    ". Tijd: " + context.since + ".\n\n" +
-    "Gewenst eindresultaat:\n" +
-    "Het verzoek is correct afgehandeld.\n\n" +
-    "Redenering:\n" +
-    explanation(),
-    "bot"
-  );
-}
-
-function explanation() {
-  if (intakeType === "INC")
-    return "Dit is een incident omdat iets niet werkt, er sprake is van verstoring en dit directe impact heeft op het werk.";
-  if (intakeType === "RFI")
-    return "Dit is een RFI omdat er gevraagd wordt om informatie of uitleg zonder dat er iets stuk is.";
-  return "Dit is een change omdat er een wijziging of aanvraag wordt gedaan die iets structureel toevoegt of aanpast.";
 }
 </script>
 
