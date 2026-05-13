@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+  <meta charset="UTF-8">
+  <title>AI Intake Bot</title>
+  <style>
+    body { font-family: Arial; background: #f4f4f4; padding: 20px; }
+    .chat { max-width: 700px; margin: auto; background: white; padding: 20px; border-radius: 8px; }
+    .msg { margin: 10px 0; }
+    .bot { color: #003366; }
+    .user { text-align: right; }
+    input { width: 100%; padding: 10px; margin-top: 10px; }
+    button { padding: 10px 20px; margin-top: 10px; }
+  </style>
+</head>
+<body>
+  <div class="chat" id="chat">
+    <div class="msg bot">
+      Hallo! Beschrijf kort wat je wilt, wat er niet werkt of welke vraag je hebt.
+    </div>
+  </div>
+
+  <input id="input" placeholder="Typ hier je bericht..." />
+  <button onclick="send()">Verstuur</button>
+
+  <script>
+    const chat = document.getElementById("chat");
+
+    function addMessage(text, cls) {
+      const div = document.createElement("div");
+      div.className = "msg " + cls;
+      div.innerText = text;
+      chat.appendChild(div);
+      chat.scrollTop = chat.scrollHeight;
+    }
+
+    function send() {
+      const input = document.getElementById("input");
+      const text = input.value;
+      if (!text) return;
+      addMessage(text, "user");
+      input.value = "";
+
+      setTimeout(() => {
+        addMessage(
+          "Dank je. Ik ga dit analyseren en stel zo nodig vervolgvraag om te bepalen of dit een Incident, RFI of Change is.",
+          "bot"
+        );
+      }, 800);
+    }
+  </script>
+</body>
+</html>
