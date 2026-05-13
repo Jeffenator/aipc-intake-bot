@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="nl">
 <head>
@@ -7,135 +8,149 @@
     body { font-family: Arial; background: #f4f4f4; padding: 20px; }
     .chat { max-width: 700px; margin: auto; background: white; padding: 20px; border-radius: 8px; }
     .msg { margin: 10px 0; }
-    .bot { color: #003366; }
+    .bot { color: #003366; white-space: pre-line; }
     .user { text-align: right; }
     input { width: 100%; padding: 10px; margin-top: 10px; }
     button { padding: 10px 20px; margin-top: 10px; }
   </style>
 </head>
 <body>
-  <div class="chat" id="chat">
-    <div class="msg bot">
-      Hallo! Beschrijf kort wat je wilt, wat er niet werkt of welke vraag je hebt.
-    </div>
+
+<div class="chat" id="chat">
+  <div class="msg bot">
+    Hallo! Beschrijf kort wat je wilt, wat er niet werkt of welke vraag je hebt.
   </div>
+</div>
 
-  <input id="input" placeholder="Typ hier je bericht..." />
-  <button onclick="send()">Verstuur</button>
+<input id="input" placeholder="Typ hier je bericht..." />
+<button onclick="send()">Verstuur</button>
 
-  <script>
-    const chat = document.getElementById("chat");
-  const input = document.getElementById("input");
+<script>
+const chat = document.getElementById("chat");
+const input = document.getElementById("input");
 
-  let step = 0;
-  let answers = {};
+let step = 0;
+let context = {
+  problem: "",
+  impact: "",
+  scope: "",
+  since: ""
+};
 
-  function addMessage(text, cls) {
-    const div = document.createElement("div");
-    div.className = "msg " + cls;
-    div.innerText = text;
-    chat.appendChild(div);
-    chat.scrollTop = chat.scrollHeight;
-  }
+function addMessage(text, cls) {
+  const div = document.createElement("div");
+  div.className = "msg " + cls;
+  div.innerText = text;
+  chat.appendChild(div);
+  chat.scrollTop = chat.scrollHeight;
+}
 
-  function send() {
-    const text = input.value;
-    if (!text) return;
+function send() {
+  const text = input.value.trim();
+  if (!text) return;
 
-    addMessage(text, "user");
-    input.value = "";
+  addMessage(text, "user");
+  input.value = "";
+  handleConversation(text.toLowerCase());
+}
 
-    handleConversation(text);
-  }
+input.addEventListener("keydown", e => {
+  if (e.key === "Enter") send();
+});
 
-  function handleConversation(text) {
-    switch (step) {
+function handleConversation(text) {
 
-      case 0:
-        answers.problem = text;
-        addMessage(
-          "Dank je. Kun je aangeven wat er concreet niet werkt of wat je wilt bereiken?",
-          "bot"
-        );
-        step++;
-        break;
+  // Stap 0 – probleem herkennen
+  if (step === 0) {
+    context.problem = text;
 
-      case 1:
-        answers.detail = text;
-        addMessage(
-          "Sinds wanneer speelt dit en heeft dit impact op je werk?",
-          "bot"
-        );
-        step++;
-        break;
-
-      case 2:
-        answers.impact = text;
-        addMessage(
-          "Wat is voor jou het gewenste eindresultaat?",
-          "bot"
-        );
-        step++;
-        break;
-
-      case 3:
-        answers.goal = text;
-        addMessage(
-          "Samenvatting:\n\n" +
-          "Probleem: " + answers.problem + "\n" +
-          "Details: " + answers.detail + "\n" +
-          "Impact: " + answers.impact + "\n" +
-          "Gewenst resultaat: " + answers.goal + "\n\n" +
-          "Klopt dit? (ja/nee)",
-          "bot"
-        );
-        step++;
-        break;
-
-      case 4:
-        if (text.toLowerCase().includes("ja")) {
-          classify();
-        } else {
-          addMessage(
-            "Oké, kun je aangeven wat er niet klopt?",
-            "bot"
-          );
-          step = 1;
-        }
-        break;
-    }
-  }
-
-  function classify() {
-    let type = "RFI";
-    let reasoning = "Dit is een vraag om informatie.";
-
-    if (
-      answers.problem.toLowerCase().includes("stuk") ||
-      answers.problem.toLowerCase().includes("werkt niet")
-    ) {
-      type = "INC";
-      reasoning = "Dit is een incident omdat iets niet (meer) werkt en directe impact heeft.";
+    if (text.includes("outlook")) {
+      addMessage("Gaat het om inloggen, mail verzenden/ontvangen of werkt Outlook helemaal niet?", "bot");
+    } else if (text.includes("vpn")) {
+      addMessage("Kun je aangeven welke foutmelding je krijgt bij het verbinden met VPN?", "bot");
+    } else if (text.includes("wifi") || text.includes("internet")) {
+      addMessage("Is de verbinding overal weg of alleen op één locatie?", "bot");
+    } else {
+      addMessage("Kun je beschrijven wat er precies niet meer werkt?", "bot");
     }
 
-    if (
-      answers.problem.toLowerCase().includes("aanpassen") ||
-      answers.goal.toLowerCase().includes("wijzigen")
-    ) {
-      type = "CHG";
-      reasoning = "Dit is een change omdat er een structurele aanpassing wordt gevraagd.";
-    }
-
-    addMessage(
-      "✅ Classificatie voltooid\n\n" +
-      "Type: " + type + "\n\n" +
-      "Short description: " + answers.problem + "\n\n" +
-      "Description: " + answers.detail + "\n\n" +
-      "Gewenst eindresultaat: " + answers.goal + "\n\n" +
-      "Redenering: " + reasoning,
-      "bot"
-    );
+    step++;
+    return;
   }
-  </script>
+
+  // Stap 1 – impact
+  if (step === 1) {
+    context.impact = text;
+    addMessage("Wat is de impact hiervan op je werk? Kun je nog doorwerken of ligt je werk (deels) stil?", "bot");
+    step++;
+    return;
+  }
+
+  // Stap 2 – scope
+  if (step === 2) {
+    context.scope = text;
+    addMessage("Hebben alleen jij, of ook collega’s hier last van?", "bot");
+    step++;
+    return;
+  }
+
+  // Stap 3 – sinds wanneer
+  if (step === 3) {
+    context.since = text;
+    showSummary();
+    step++;
+    return;
+  }
+
+  // Stap 4 – bevestiging
+  if (step === 4) {
+    if (text.includes("ja")) {
+      classifyIncident();
+    } else {
+      addMessage("Oké, kun je aangeven wat er niet klopt in de samenvatting?", "bot");
+      step++;
+    }
+    return;
+  }
+
+  // Correctie
+  if (step === 5) {
+    context.problem += " (aangepast: " + text + ")";
+    showSummary();
+    step = 4;
+  }
+}
+
+function showSummary() {
+  const summary =
+    "Samenvatting:\n\n" +
+    "Probleem: " + context.problem + "\n" +
+    "Impact: " + context.impact + "\n" +
+    "Betreft: " + context.scope + "\n" +
+    "Sinds wanneer: " + context.since + "\n\n" +
+    "Klopt dit? (ja/nee)";
+
+  addMessage(summary, "bot");
+}
+
+function classifyIncident() {
+  const output =
+    "✅ Type: INCIDENT\n\n" +
+    "Short description:\n" +
+    context.problem + "\n\n" +
+    "Description:\n" +
+    "Het probleem is: " + context.problem + ". " +
+    "De impact is: " + context.impact + ". " +
+    "Het betreft: " + context.scope + ". " +
+    "Het speelt sinds: " + context.since + ".\n\n" +
+    "Gewenst eindresultaat:\n" +
+    "Het probleem is opgelost zodat normaal gewerkt kan worden.\n\n" +
+    "Redenering:\n" +
+    "Dit is een incident omdat iets niet meer werkt en dit directe impact heeft op het werk.";
+
+  addMessage(output, "bot");
+}
+</script>
+
 </body>
 </html>
