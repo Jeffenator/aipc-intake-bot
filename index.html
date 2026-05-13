@@ -10,35 +10,10 @@
       padding: 20px;
     }
 
-    /* ===== Enablement logo linksboven ===== */
-    .enablement-logo {
-      position: fixed;
-      top: 16px;
-      left: 16px;
-      z-index: 1000;
-    }
-
-    .enablement-logo img {
-      height: 48px;
-    }
-
-    /* ===== Hat-ty logo rechtsonder ===== */
-    .hatty-logo {
-      position: fixed;
-      bottom: 16px;
-      right: 16px;
-      z-index: 1000;
-      opacity: 0.95;
-    }
-
-    .hatty-logo img {
-      height: 72px;
-    }
-
     /* ===== Chat ===== */
     .chat {
-      max-width: 760px;
-      margin: 80px auto 20px auto;
+      max-width: 720px;
+      margin: 40px auto 20px auto;
       background: white;
       padding: 20px;
       border-radius: 8px;
@@ -51,7 +26,7 @@
 
     /* ===== Input ===== */
     .input-area {
-      max-width: 760px;
+      max-width: 720px;
       margin: auto;
       display: flex;
       gap: 10px;
@@ -74,18 +49,44 @@
     button:hover {
       background: #00539b;
     }
+
+    /* ===== Ticket sidebar ===== */
+    .tickets {
+      position: fixed;
+      top: 40px;
+      right: 16px;
+      width: 260px;
+      background: white;
+      border-radius: 8px;
+      padding: 14px;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+      font-size: 13px;
+    }
+
+    .tickets h3 {
+      margin-top: 0;
+      font-size: 15px;
+      color: #003366;
+    }
+
+    .ticket {
+      border-top: 1px solid #eee;
+      padding-top: 8px;
+      margin-top: 8px;
+    }
+
+    .ticket strong {
+      display: block;
+      color: #003366;
+    }
   </style>
 </head>
 <body>
 
-<!-- ===== Enablement logo linksboven ===== -->
-<div class="enablement-logo">
-  <img src="Enablement logo.jpg" alt="Conclusion Enablement logo">
-</div>
-
-<!-- ===== Hat-ty logo rechtsonder ===== -->
-<div class="hatty-logo">
-  <img src="Hatty.png" alt="Hat-ty logo">
+<!-- ===== Ticket sidebar ===== -->
+<div class="tickets">
+  <h3>📋 Mijn tickets</h3>
+  <div id="ticketsContent">Nog geen tickets</div>
 </div>
 
 <!-- ===== Chat ===== -->
@@ -96,22 +97,26 @@
   </div>
 </div>
 
-<!-- ===== Input ===== -->
 <div class="input-area">
   <input id="input" placeholder="Typ hier je bericht..." />
   <button onclick="send()">Verstuur</button>
 </div>
 
 <script>
+/* ================= CONFIG ================= */
 const API_BASE = "https://aipc-intake-bot.vercel.app";
 const maxQuestions = 5;
 
+/* ================= STATE ================= */
 const chat = document.getElementById("chat");
 const input = document.getElementById("input");
+const ticketsContent = document.getElementById("ticketsContent");
 
 let messages = [];
+let tickets = [];
 let busy = false;
 
+/* ================= HELPERS ================= */
 function addMessage(text, cls) {
   const div = document.createElement("div");
   div.className = "msg " + cls;
@@ -120,6 +125,24 @@ function addMessage(text, cls) {
   chat.scrollTop = chat.scrollHeight;
 }
 
+function renderTickets() {
+  if (tickets.length === 0) {
+    ticketsContent.innerText = "Nog geen tickets";
+    return;
+  }
+
+  ticketsContent.innerHTML = "";
+  tickets.forEach(t => {
+    const div = document.createElement("div");
+    div.className = "ticket";
+    div.innerHTML =
+      "<strong>" + t.number + " (" + t.type + ")</strong>" +
+      t.summary;
+    ticketsContent.appendChild(div);
+  });
+}
+
+/* ================= INPUT ================= */
 function send() {
   const text = input.value.trim();
   if (!text || busy) return;
@@ -134,6 +157,7 @@ input.addEventListener("keydown", e => {
   if (e.key === "Enter") send();
 });
 
+/* ================= AI CALL ================= */
 async function callAI() {
   if (busy) return;
   busy = true;
@@ -153,13 +177,13 @@ async function callAI() {
 
     const data = await resp.json();
 
-    if (data.stage === "question" && data.nextQuestion) {
+    if (data.stage === "question") {
       messages.push({ role: "assistant", content: data.nextQuestion });
       addMessage(data.nextQuestion, "bot");
       return;
     }
 
-    if (data.stage === "confirm" && data.summary) {
+    if (data.stage === "confirm") {
       messages.push({ role: "assistant", content: data.summary });
       addMessage(data.summary + "\n\nKlopt dit? (ja/nee)", "bot");
       return;
@@ -168,34 +192,26 @@ async function callAI() {
     if (data.stage === "final") {
       const output =
         "✅ Type: " + data.classification + "\n\n" +
-        "Short description:\n" + data.shortDescription + "\n\n" +
-        "Description:\n" + data.description + "\n\n" +
-        "Gewenst eindresultaat:\n" + data.desiredOutcome + "\n\n" +
-        "Redenering:\n" + data.reasoning;
+        data.shortDescription;
 
       addMessage(output, "bot");
 
-      setTimeout(() => {
-        const prefix =
-          data.classification === "INC" ? "INC" :
-          data.classification === "CHG" ? "CHG" : "RFI";
+      const ticketNr =
+        data.classification + Math.floor(100000 + Math.random() * 900000);
 
-        const ticketNr = prefix + Math.floor(100000 + Math.random() * 900000);
+      tickets.push({
+        number: ticketNr,
+        type: data.classification,
+        summary: data.shortDescription
+      });
+      renderTickets();
 
-        addMessage(
-          "📨 ServiceNow – Conclusion Enablement\n\n" +
-          "Status: ✅ Ticket aangemaakt\n" +
-          "Type: " + data.classification + "\n" +
-          "Ticketnummer: " + ticketNr + "\n\n" +
-          "Dit ticket is succesvol geregistreerd in de servicemanagement tooling " +
-          "van Conclusion Enablement (ServiceNow).\n\n" +
-          "Eén van de medewerkers zal dit ticket in behandeling nemen.\n" +
-          "Je wordt op de hoogte gehouden van de voortgang.",
-          "bot"
-        );
-      }, 1200);
-
-      return;
+      addMessage(
+        "📨 ServiceNow – Conclusion Enablement\n\n" +
+        "Ticketnummer: " + ticketNr + "\n\n" +
+        "Eén van de medewerkers zal dit ticket in behandeling nemen.",
+        "bot"
+      );
     }
 
   } catch (e) {
