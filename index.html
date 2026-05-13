@@ -2,56 +2,45 @@
 <html lang="nl">
 <head>
   <meta charset="UTF-8">
-  <title>AI Intake Bot</title>
+  <title>Hat-ty | Conclusion Enablement</title>
   <style>
-    body { font-family: Arial; background: #f4f4f4; padding: 20px; }
-    .chat { max-width: 700px; margin: auto; background: white; padding: 20px; border-radius: 8px; }
+    body { font-family: Arial, sans-serif; background: #f4f4f4; padding: 20px; }
+    .chat { max-width: 760px; margin: auto; background: white; padding: 20px; border-radius: 8px; }
     .msg { margin: 10px 0; }
     .bot { color: #003366; white-space: pre-line; }
     .user { text-align: right; }
-    input { width: 100%; padding: 10px; margin-top: 10px; }
-    button { padding: 10px 20px; margin-top: 10px; }
+    .input-area { max-width: 760px; margin: 10px auto; display: flex; gap: 10px; }
+    input { flex: 1; padding: 10px; }
+    button { padding: 10px 18px; background: #003366; color: white; border: none; cursor: pointer; }
+    button:hover { background: #00539b; }
   </style>
 </head>
 <body>
 
 <div class="chat" id="chat">
   <div class="msg bot">
-    Hallo! Beschrijf kort wat je wilt, wat er niet werkt of welke vraag je hebt.
+    👋 Hallo, ik ben <strong>Hat-ty</strong>.<br>
+    Beschrijf kort wat je wilt, wat er niet werkt of welke vraag je hebt.
   </div>
 </div>
 
-<input id="input" placeholder="Typ hier je bericht..." />
-<button onclick="send()">Verstuur</button>
+<div class="input-area">
+  <input id="input" placeholder="Typ hier je bericht..." />
+  <button onclick="send()">Verstuur</button>
+</div>
 
 <script>
-/* =========================================================
-   CONFIG
-   ========================================================= */
-
-// ✅ Jouw Vercel backend
+/* ================= CONFIG ================= */
 const API_BASE = "https://aipc-intake-bot.vercel.app";
-
-// ✅ Max aantal AI-vragen
 const maxQuestions = 5;
 
-/* =========================================================
-   STATE
-   ========================================================= */
-
+/* ================= STATE ================= */
 const chat = document.getElementById("chat");
 const input = document.getElementById("input");
-
-// Conversatiegeschiedenis (ChatGPT-achtig)
 let messages = [];
-
-// Voorkomt dubbele / oneindige calls
 let busy = false;
 
-/* =========================================================
-   UI HELPERS
-   ========================================================= */
-
+/* ================= HELPERS ================= */
 function addMessage(text, cls) {
   const div = document.createElement("div");
   div.className = "msg " + cls;
@@ -60,20 +49,14 @@ function addMessage(text, cls) {
   chat.scrollTop = chat.scrollHeight;
 }
 
-/* =========================================================
-   INPUT HANDLING
-   ========================================================= */
-
+/* ================= INPUT ================= */
 function send() {
   const text = input.value.trim();
   if (!text || busy) return;
 
   addMessage(text, "user");
   input.value = "";
-
-  // Voeg user-input toe aan context
   messages.push({ role: "user", content: text });
-
   callAI();
 }
 
@@ -81,10 +64,7 @@ input.addEventListener("keydown", e => {
   if (e.key === "Enter") send();
 });
 
-/* =========================================================
-   AI CALL (DE BELANGRIJKSTE FUNCTIE)
-   ========================================================= */
-
+/* ================= AI CALL ================= */
 async function callAI() {
   if (busy) return;
   busy = true;
@@ -93,71 +73,74 @@ async function callAI() {
     const resp = await fetch(`${API_BASE}/api/next`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        messages,
-        maxQuestions
-      })
+      body: JSON.stringify({ messages, maxQuestions })
     });
 
-    /* -------------------------------
-       BACKEND ERROR → DIRECT TONEN
-       ------------------------------- */
     if (!resp.ok) {
-      const errorText = await resp.text();
+      const err = await resp.text();
       addMessage(
-        "❌ AI-backend fout (" + resp.status + ")\n\n" +
-        "Details:\n" + errorText + "\n\n" +
-        "👉 Check Vercel → Deployments → Functions → api/next → Logs",
+        "❌ AI-backend fout (" + resp.status + ")\n\n" + err,
         "bot"
       );
       return;
     }
 
-    /* -------------------------------
-       JSON VERWERKEN
-       ------------------------------- */
     const data = await resp.json();
 
-    // 1️⃣ AI wil een vervolgvraag stellen
+    /* === AI vervolgvraag === */
     if (data.stage === "question" && data.nextQuestion) {
       messages.push({ role: "assistant", content: data.nextQuestion });
       addMessage(data.nextQuestion, "bot");
       return;
     }
 
-    // 2️⃣ AI geeft samenvatting + bevestiging
+    /* === Samenvatting + bevestiging === */
     if (data.stage === "confirm" && data.summary) {
       messages.push({ role: "assistant", content: data.summary });
       addMessage(data.summary + "\n\nKlopt dit? (ja/nee)", "bot");
       return;
     }
 
-    // 3️⃣ AI is klaar → ticket output
+    /* === Definitieve output + ServiceNow mock === */
     if (data.stage === "final") {
       const output =
-        "✅ Type: " + (data.classification || "-") + "\n\n" +
-        "Short description:\n" + (data.shortDescription || "-") + "\n\n" +
-        "Description:\n" + (data.description || "-") + "\n\n" +
-        "Gewenst eindresultaat:\n" + (data.desiredOutcome || "-") + "\n\n" +
-        "Redenering:\n" + (data.reasoning || "-");
+        "✅ Type: " + data.classification + "\n\n" +
+        "Short description:\n" + data.shortDescription + "\n\n" +
+        "Description:\n" + data.description + "\n\n" +
+        "Gewenst eindresultaat:\n" + data.desiredOutcome + "\n\n" +
+        "Redenering:\n" + data.reasoning;
 
       messages.push({ role: "assistant", content: output });
       addMessage(output, "bot");
+
+      /* ---- Mock ServiceNow integratie ---- */
+      setTimeout(() => {
+        const prefix =
+          data.classification === "INC" ? "INC" :
+          data.classification === "CHG" ? "CHG" : "RFI";
+
+        const ticketNr = prefix + Math.floor(100000 + Math.random() * 900000);
+
+        const snMessage =
+          "📨 ServiceNow – Conclusion Enablement\n\n" +
+          "Status: ✅ Ticket aangemaakt\n" +
+          "Type: " + data.classification + "\n" +
+          "Ticketnummer: " + ticketNr + "\n\n" +
+          "Dit ticket is succesvol geregistreerd in de servicemanagement tooling " +
+          "van Conclusion Enablement (ServiceNow).\n\n" +
+          "Eén van de medewerkers zal dit ticket in behandeling nemen.\n" +
+          "Je wordt op de hoogte gehouden van de voortgang.";
+
+        addMessage(snMessage, "bot");
+      }, 1200);
+
       return;
     }
 
-    // Onverwachte maar geldige response
-    addMessage(
-      "⚠️ Onverwachte AI-response.\nCheck Vercel logs voor details.",
-      "bot"
-    );
+    addMessage("⚠️ Onverwachte AI-response.", "bot");
 
-  } catch (err) {
-    addMessage(
-      "❌ Kon AI-backend niet bereiken.\n\n" +
-      "Fout:\n" + String(err),
-      "bot"
-    );
+  } catch (e) {
+    addMessage("❌ Fout bij benaderen AI-backend:\n" + String(e), "bot");
   } finally {
     busy = false;
   }
