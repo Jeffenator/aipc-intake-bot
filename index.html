@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="nl">
 <head>
@@ -30,12 +29,42 @@ const chat = document.getElementById("chat");
 const input = document.getElementById("input");
 
 let step = 0;
+let intakeType = "";
 let context = {
   problem: "",
   impact: "",
   scope: "",
   since: ""
 };
+
+/* ========= HERKENNING INC / RFI / CHG ========= */
+
+const INCIDENT_KEYWORDS = [
+  "werkt niet", "stuk", "foutmelding", "crash", "kan niet inloggen",
+  "uitval", "probleem", "storing"
+];
+
+const RFI_KEYWORDS = [
+  "hoe", "wat is", "kan ik", "informatie", "uitleg",
+  "handleiding", "vraag"
+];
+
+const CHANGE_KEYWORDS = [
+  "aanvragen", "toevoegen", "wijzigen", "nieuwe", "bestellen",
+  "laptop", "account", "toegang"
+];
+
+function detectType(text) {
+  const score = { INC: 0, RFI: 0, CHG: 0 };
+
+  INCIDENT_KEYWORDS.forEach(k => { if (text.includes(k)) score.INC++; });
+  RFI_KEYWORDS.forEach(k => { if (text.includes(k)) score.RFI++; });
+  CHANGE_KEYWORDS.forEach(k => { if (text.includes(k)) score.CHG++; });
+
+  return Object.keys(score).reduce((a, b) => score[a] >= score[b] ? a : b);
+}
+
+/* ========= CHAT FUNCTIES ========= */
 
 function addMessage(text, cls) {
   const div = document.createElement("div");
@@ -58,43 +87,65 @@ input.addEventListener("keydown", e => {
   if (e.key === "Enter") send();
 });
 
+/* ========= CONVERSATIE ========= */
+
 function handleConversation(text) {
 
-  // Stap 0 – probleem herkennen
   if (step === 0) {
     context.problem = text;
+    intakeType = detectType(text);
 
-    if (text.includes("outlook")) {
-      addMessage("Gaat het om inloggen, mail verzenden/ontvangen of werkt Outlook helemaal niet?", "bot");
-    } else if (text.includes("vpn")) {
-      addMessage("Kun je aangeven welke foutmelding je krijgt bij het verbinden met VPN?", "bot");
-    } else if (text.includes("wifi") || text.includes("internet")) {
-      addMessage("Is de verbinding overal weg of alleen op één locatie?", "bot");
-    } else {
-      addMessage("Kun je beschrijven wat er precies niet meer werkt?", "bot");
+    if (intakeType === "INC") {
+      addMessage("Dit lijkt op een probleem waarbij iets niet werkt. Ik stel een paar vragen om dit goed te begrijpen.", "bot");
+      addMessage("Wat merk je precies van het probleem?", "bot");
+    }
+
+    if (intakeType === "RFI") {
+      addMessage("Dit lijkt een vraag om informatie. Waarvoor heb je deze informatie nodig?", "bot");
+    }
+
+    if (intakeType === "CHG") {
+      addMessage("Dit lijkt een wijziging of aanvraag. Wat wil je precies laten aanpassen of aanvragen?", "bot");
     }
 
     step++;
     return;
   }
 
-  // Stap 1 – impact
   if (step === 1) {
     context.impact = text;
-    addMessage("Wat is de impact hiervan op je werk? Kun je nog doorwerken of ligt je werk (deels) stil?", "bot");
+
+    if (intakeType === "INC") {
+      addMessage("Wat is de impact op je werk? Kun je nog doorwerken of ligt je werk stil?", "bot");
+    }
+    if (intakeType === "RFI") {
+      addMessage("Is dit ter informatie of om een actie te kunnen uitvoeren?", "bot");
+    }
+    if (intakeType === "CHG") {
+      addMessage("Is dit een eenmalige aanvraag of een structurele wijziging?", "bot");
+    }
+
     step++;
     return;
   }
 
-  // Stap 2 – scope
   if (step === 2) {
     context.scope = text;
-    addMessage("Hebben alleen jij, of ook collega’s hier last van?", "bot");
+
+    if (intakeType === "INC") {
+      addMessage("Hebben alleen jij, of ook collega’s hier last van?", "bot");
+    }
+    if (intakeType === "RFI") {
+      addMessage("Heb je deze informatie op korte termijn nodig?", "bot");
+    }
+    if (intakeType === "CHG") {
+      addMessage("Wie gaan hier gebruik van maken?", "bot");
+    }
+
     step++;
     return;
   }
 
-  // Stap 3 – sinds wanneer
   if (step === 3) {
     context.since = text;
     showSummary();
@@ -102,18 +153,16 @@ function handleConversation(text) {
     return;
   }
 
-  // Stap 4 – bevestiging
   if (step === 4) {
     if (text.includes("ja")) {
-      classifyIncident();
+      classify();
     } else {
-      addMessage("Oké, kun je aangeven wat er niet klopt in de samenvatting?", "bot");
+      addMessage("Oké, kun je aangeven wat er niet klopt?", "bot");
       step++;
     }
     return;
   }
 
-  // Correctie
   if (step === 5) {
     context.problem += " (aangepast: " + text + ")";
     showSummary();
@@ -121,34 +170,42 @@ function handleConversation(text) {
   }
 }
 
-function showSummary() {
-  const summary =
-    "Samenvatting:\n\n" +
-    "Probleem: " + context.problem + "\n" +
-    "Impact: " + context.impact + "\n" +
-    "Betreft: " + context.scope + "\n" +
-    "Sinds wanneer: " + context.since + "\n\n" +
-    "Klopt dit? (ja/nee)";
+/* ========= SAMENVATTING & OUTPUT ========= */
 
-  addMessage(summary, "bot");
+function showSummary() {
+  addMessage(
+    "Samenvatting:\n\n" +
+    "Type: " + intakeType + "\n" +
+    "Probleem/verzoek: " + context.problem + "\n" +
+    "Impact/doel: " + context.impact + "\n" +
+    "Scope: " + context.scope + "\n" +
+    "Tijd/context: " + context.since + "\n\n" +
+    "Klopt dit? (ja/nee)",
+    "bot"
+  );
 }
 
-function classifyIncident() {
-  const output =
-    "✅ Type: INCIDENT\n\n" +
-    "Short description:\n" +
-    context.problem + "\n\n" +
+function classify() {
+  addMessage(
+    "✅ Type: " + intakeType + "\n\n" +
+    "Short description:\n" + context.problem + "\n\n" +
     "Description:\n" +
-    "Het probleem is: " + context.problem + ". " +
-    "De impact is: " + context.impact + ". " +
-    "Het betreft: " + context.scope + ". " +
-    "Het speelt sinds: " + context.since + ".\n\n" +
+    "Context: " + context.impact + ". Scope: " + context.scope +
+    ". Tijd: " + context.since + ".\n\n" +
     "Gewenst eindresultaat:\n" +
-    "Het probleem is opgelost zodat normaal gewerkt kan worden.\n\n" +
+    "Het verzoek is correct afgehandeld.\n\n" +
     "Redenering:\n" +
-    "Dit is een incident omdat iets niet meer werkt en dit directe impact heeft op het werk.";
+    explanation(),
+    "bot"
+  );
+}
 
-  addMessage(output, "bot");
+function explanation() {
+  if (intakeType === "INC")
+    return "Dit is een incident omdat iets niet werkt, er sprake is van verstoring en dit directe impact heeft op het werk.";
+  if (intakeType === "RFI")
+    return "Dit is een RFI omdat er gevraagd wordt om informatie of uitleg zonder dat er iets stuk is.";
+  return "Dit is een change omdat er een wijziging of aanvraag wordt gedaan die iets structureel toevoegt of aanpast.";
 }
 </script>
 
