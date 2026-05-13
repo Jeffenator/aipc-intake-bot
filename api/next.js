@@ -84,7 +84,6 @@ module.exports = async function handler(req, res) {
 
     const payload = JSON.stringify({
       messages: [system, ...messages],
-      temperature: 0.3
     });
 
     const endpointHost = endpoint.replace(/^https?:\/\//, "").replace(/\/$/, "");
