@@ -25,15 +25,32 @@
 <button onclick="send()">Verstuur</button>
 
 <script>
+/* =========================================================
+   CONFIG
+   ========================================================= */
+
+// ✅ Jouw Vercel backend
+const API_BASE = "https://aipc-intake-bot.vercel.app";
+
+// ✅ Max aantal AI-vragen
+const maxQuestions = 5;
+
+/* =========================================================
+   STATE
+   ========================================================= */
+
 const chat = document.getElementById("chat");
 const input = document.getElementById("input");
 
-// 1) Koppel je frontend aan je Vercel backend (zonder slash op het eind)
-const API_BASE = "https://aipc-intake-bot.vercel.app";
-
-// 2) We bewaren de conversatie als "messages" (zoals ChatGPT werkt)
+// Conversatiegeschiedenis (ChatGPT-achtig)
 let messages = [];
-const maxQuestions = 5; // pas aan als je wil
+
+// Voorkomt dubbele / oneindige calls
+let busy = false;
+
+/* =========================================================
+   UI HELPERS
+   ========================================================= */
 
 function addMessage(text, cls) {
   const div = document.createElement("div");
@@ -43,17 +60,20 @@ function addMessage(text, cls) {
   chat.scrollTop = chat.scrollHeight;
 }
 
+/* =========================================================
+   INPUT HANDLING
+   ========================================================= */
+
 function send() {
   const text = input.value.trim();
-  if (!text) return;
+  if (!text || busy) return;
 
   addMessage(text, "user");
   input.value = "";
 
-  // 3) Voeg user-bericht toe aan context
+  // Voeg user-input toe aan context
   messages.push({ role: "user", content: text });
 
-  // 4) Vraag de AI (via je Vercel endpoint) om volgende stap
   callAI();
 }
 
@@ -61,7 +81,14 @@ input.addEventListener("keydown", e => {
   if (e.key === "Enter") send();
 });
 
+/* =========================================================
+   AI CALL (DE BELANGRIJKSTE FUNCTIE)
+   ========================================================= */
+
 async function callAI() {
+  if (busy) return;
+  busy = true;
+
   try {
     const resp = await fetch(`${API_BASE}/api/next`, {
       method: "POST",
@@ -72,38 +99,67 @@ async function callAI() {
       })
     });
 
+    /* -------------------------------
+       BACKEND ERROR → DIRECT TONEN
+       ------------------------------- */
+    if (!resp.ok) {
+      const errorText = await resp.text();
+      addMessage(
+        "❌ AI-backend fout (" + resp.status + ")\n\n" +
+        "Details:\n" + errorText + "\n\n" +
+        "👉 Check Vercel → Deployments → Functions → api/next → Logs",
+        "bot"
+      );
+      return;
+    }
+
+    /* -------------------------------
+       JSON VERWERKEN
+       ------------------------------- */
     const data = await resp.json();
 
-    // 5) Drie mogelijke AI-stadia: question, confirm, final
+    // 1️⃣ AI wil een vervolgvraag stellen
     if (data.stage === "question" && data.nextQuestion) {
       messages.push({ role: "assistant", content: data.nextQuestion });
       addMessage(data.nextQuestion, "bot");
       return;
     }
 
+    // 2️⃣ AI geeft samenvatting + bevestiging
     if (data.stage === "confirm" && data.summary) {
       messages.push({ role: "assistant", content: data.summary });
       addMessage(data.summary + "\n\nKlopt dit? (ja/nee)", "bot");
       return;
     }
 
+    // 3️⃣ AI is klaar → ticket output
     if (data.stage === "final") {
-      const out =
+      const output =
         "✅ Type: " + (data.classification || "-") + "\n\n" +
         "Short description:\n" + (data.shortDescription || "-") + "\n\n" +
         "Description:\n" + (data.description || "-") + "\n\n" +
         "Gewenst eindresultaat:\n" + (data.desiredOutcome || "-") + "\n\n" +
         "Redenering:\n" + (data.reasoning || "-");
 
-      messages.push({ role: "assistant", content: out });
-      addMessage(out, "bot");
+      messages.push({ role: "assistant", content: output });
+      addMessage(output, "bot");
       return;
     }
 
-    // 6) Fallback als AI iets onverwachts teruggeeft
-    addMessage("Ik heb nog iets meer context nodig. Kun je dit verder toelichten?", "bot");
-  } catch (e) {
-    addMessage("Er ging iets mis bij het benaderen van de AI-backend. Check of Vercel online is en of je endpoint werkt.", "bot");
+    // Onverwachte maar geldige response
+    addMessage(
+      "⚠️ Onverwachte AI-response.\nCheck Vercel logs voor details.",
+      "bot"
+    );
+
+  } catch (err) {
+    addMessage(
+      "❌ Kon AI-backend niet bereiken.\n\n" +
+      "Fout:\n" + String(err),
+      "bot"
+    );
+  } finally {
+    busy = false;
   }
 }
 </script>
